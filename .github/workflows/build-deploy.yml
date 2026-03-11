@@ -1,4 +1,5 @@
-name: My Service Build and Deploy
+name: Build, Deploy, and Run Playwright Tests
+
 on:
   push:
     branches:
@@ -9,30 +10,87 @@ on:
         description: "URL to run tests against"
         required: true
         default: https://my-site.com
+
 jobs:
-  deploy_staging:
-    name: Staging Deploy
+  deploy_and_test:
     runs-on: ubuntu-latest
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+
     steps:
-      - name: Logging the Staging release
-        run: echo "This run is the staging deployment"
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set URL to pass to Tests
+      - uses: actions/checkout@v4
+
+      - name: Build and Deploy Staging
         run: |
-          echo "ENVIRONMENT=http://my-site.com" >> $GITHUB_ENV
-      - name: Build and Deploy
-        run: |
-          echo "Build and Deploy"
-      - name: Trigger and wait for automation repo workflow
-        uses: convictional/trigger-workflow-and-wait@v1.6.5
+          echo "Building and deploying staging..."
+          # Replace with your actual deploy commands
+
+      - name: Trigger Automation Repo Workflow
+        id: trigger
+        uses: actions/github-script@v7
         with:
-          owner: djewsanchez
-          repo: pw-bp
-          github_token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          workflow_file_name: playwright.yml
-          ref: main
-          wait_interval: 15
-          propagate_failure: true
-          client_payload: '{"environment":"${{ github.event.inputs.environment }}","sha":"${{ github.sha }}"}'
+          github-token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          script: |
+            const owner = "djewsanchez";
+            const repo = "pw-bp";
+            const workflow_id = "playwright.yml"; // automation repo workflow file
+            const ref = "main";
+
+            // Trigger repository_dispatch
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id,
+              ref,
+              inputs: {
+                environment: "${{ github.event.inputs.environment }}",
+                sha: "${{ github.sha }}",
+                repo: "${{ github.repository }}",
+                owner: "${{ github.repository_owner }}"
+              }
+            });
+
+            core.setOutput("sha", "${{ github.sha }}");
+
+      - name: Wait for Automation Repo Workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          script: |
+            const owner = "djewsanchez";
+            const repo = "pw-bp";
+            const workflow_id = "playwright.yml";
+            const sha = "${{ steps.trigger.outputs.sha }}";
+
+            console.log("Polling automation repo workflow...");
+
+            let status = "queued";
+            let conclusion = null;
+
+            while(status !== "completed") {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id,
+                per_page: 10
+              });
+
+              const run = runs.data.workflow_runs.find(r => r.event === "repository_dispatch" && r.head_sha === sha);
+
+              if(run) {
+                status = run.status;
+                conclusion = run.conclusion;
+              }
+
+              if(status !== "completed") {
+                console.log("Still running... waiting 10s");
+                await new Promise(resolve => setTimeout(resolve, 10000));
+              }
+            }
+
+            console.log(`Automation workflow completed with conclusion: ${conclusion}`);
+
+            if(conclusion !== "success") {
+              core.setFailed("Playwright automation workflow failed in automation repo");
+            }
+
+      - name: Done
+        run: echo "Playwright automation workflow finished; status reflected in PR/commit checks."
