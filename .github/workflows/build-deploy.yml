@@ -1,5 +1,5 @@
 name: Build, Deploy, and Run Playwright Tests
-# Trigger manual commit 4
+
 on:
   push:
     branches: ["main", "develop"]
@@ -15,42 +15,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout
       - uses: actions/checkout@v4
 
-      # 2️⃣ Build and deploy staging
       - name: Build and Deploy Staging
         run: |
           echo "Deploying staging..."
-          # Add your real deploy commands here
+          # deploy commands
 
-      # 3️⃣ Trigger Automation Repo Workflow
+      # Set environment safely for push + manual
+      - name: Set Environment
+        id: env
+        run: |
+          ENV=${{ github.event.inputs.environment || 'https://my-site.com' }}
+          echo "ENVIRONMENT=$ENV" >> $GITHUB_ENV
+
+      # Trigger automation repo workflow
       - name: Trigger Playwright Automation
-        id: trigger
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.REPO_ACCESS_TOKEN }}
           script: |
             const owner = "djewsanchez";
             const repo = "pw-bp";
-            const workflow_id = "playwright.yml";
-            const ref = "main";
 
-            console.log("Triggering automation repo workflow...");
+            console.log("Triggering automation workflow...");
+
             await github.rest.actions.createWorkflowDispatch({
               owner,
               repo,
-              workflow_id,
-              ref,
+              workflow_id: "playwright.yml",
+              ref: "main",
               inputs: {
-                environment: "${{ github.event.inputs.environment }}",
-                commit_sha: "${{ github.sha }}",
-                source_repo: "${{ github.repository }}",
-                source_owner: "${{ github.event.repository.name }}"
+                environment: process.env.ENVIRONMENT,
+                source_sha: "${{ github.sha }}"
               }
             });
 
-      # 4️⃣ Wait for Automation Repo Workflow Completion
+      # Wait a bit so the workflow appears in API
+      - name: Initial Wait
+        run: sleep 20
+
+      # Poll automation repo workflow
       - name: Wait for Automation Workflow
         uses: actions/github-script@v7
         with:
@@ -58,42 +63,47 @@ jobs:
           script: |
             const owner = "djewsanchez";
             const repo = "pw-bp";
-            const workflow_id = "playwright.yml";
-            const sha = "${{ github.sha }}";
 
-            console.log("Polling automation repo workflow...");
+            console.log("Polling automation workflow status...");
 
-            let status = "queued";
-            let conclusion = null;
+            let completed = false;
 
-            while (status !== "completed") {
+            while (!completed) {
+
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner,
                 repo,
-                workflow_id,
-                per_page: 10
+                workflow_id: "playwright.yml",
+                per_page: 5
               });
 
               const run = runs.data.workflow_runs.find(r =>
-                r.event === "workflow_dispatch" && r.head_sha === sha
+                r.event === "workflow_dispatch"
               );
 
-              if (run) {
-                status = run.status;
-                conclusion = run.conclusion;
+              if (!run) {
+                console.log("No run found yet...");
+              } else {
+
+                console.log(`Status: ${run.status}`);
+
+                if (run.status === "completed") {
+
+                  console.log(`Conclusion: ${run.conclusion}`);
+
+                  if (run.conclusion !== "success") {
+                    core.setFailed("Automation tests failed");
+                  }
+
+                  completed = true;
+                }
               }
 
-              if (status !== "completed") {
-                console.log("Still running... waiting 15s");
-                await new Promise(resolve => setTimeout(resolve, 15000));
+              if (!completed) {
+                console.log("Waiting 15 seconds...");
+                await new Promise(r => setTimeout(r, 15000));
               }
-            }
-
-            console.log(`Automation workflow completed with conclusion: ${conclusion}`);
-
-            if (conclusion !== "success") {
-              core.setFailed("Playwright automation workflow failed in automation repo");
             }
 
       - name: Done
-        run: echo "Playwright automation workflow finished; status reflected in PR/commit checks."
+        run: echo "Automation workflow finished"
