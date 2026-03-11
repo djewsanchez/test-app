@@ -32,3 +32,15 @@ jobs:
           repository: djewsanchez/pw-bp
           event-type: run-my-tests
           client-payload: '{"github": ${{ toJson(github) }}}'
+      - name: Wait for Automation Repo Workflow
+        uses: peter-evans/wait-for-workflow@v2
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          owner: djewsanchez
+          repo: pw-bp
+          workflow: playwright.yml # workflow file in automation repo
+          ref: main # branch to wait on
+          check-run-name: Playwright Tests
+          wait-for-completion: true
+          conclusion: success # fail if the workflow conclusion is not success
+          poll-interval-seconds: 15
