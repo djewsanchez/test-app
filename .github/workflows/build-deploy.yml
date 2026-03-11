@@ -47,7 +47,7 @@ jobs:
               ref: "main",
               inputs: {
                 environment: process.env.ENVIRONMENT,
-                source_sha: "${{ github.sha }}"
+                commit_sha: "${{ github.sha }}"
               }
             });
 
