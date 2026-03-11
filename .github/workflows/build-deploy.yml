@@ -69,6 +69,7 @@ jobs:
             console.log("Polling automation workflow status...");
 
             let completed = false;
+            let runId = null;
 
             while (!completed) {
 
@@ -91,10 +92,14 @@ jobs:
 
                 if (run.status === "completed") {
 
+                  runId = run.id;
+                  const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${runId}`;
+
+                  console.log(`Automation Workflow Link: ${runUrl}`);
                   console.log(`Conclusion: ${run.conclusion}`);
 
                   if (run.conclusion !== "success") {
-                    core.setFailed("Automation tests failed");
+                    core.setFailed(`Playwright tests failed.`);
                   }
 
                   completed = true;
