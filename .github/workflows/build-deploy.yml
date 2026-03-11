@@ -3,7 +3,7 @@ name: Build, Deploy, and Run Playwright Tests
 on:
   push:
     branches:
-      - develop
+      - ["main", "develop"]
   workflow_dispatch:
     inputs:
       environment:
