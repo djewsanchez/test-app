@@ -1,5 +1,5 @@
 name: Build, Deploy, and Run Playwright Tests
-
+# Trigger manual commit
 on:
   push:
     branches: ["main", "develop"]
