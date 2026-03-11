@@ -46,7 +46,7 @@ jobs:
                 environment: "${{ github.event.inputs.environment }}",
                 commit_sha: "${{ github.sha }}",
                 source_repo: "${{ github.repository }}",
-                source_owner: "${{ github.repository_owner }}"
+                source_owner: "${{ github.event.repository.name }}"
               }
             });
 
